@@ -392,8 +392,15 @@ public final class JSONScanner extends JSONLexerBase {
             y3 = c3;
             M0 = c5;
             M1 = c6;
-            d0 = c8;
-            d1 = c9;
+
+            if (c9 == ' ') {
+                d0 = '0';
+                d1 = c8;
+                date_len = 9;
+            } else {
+                d0 = c8;
+                d1 = c9;
+            }
         } else if ((c4 == '-' && c6 == '-') // cn yyyy-m-dd
         ) {
             y0 = c0;
@@ -939,10 +946,15 @@ public final class JSONScanner extends JSONLexerBase {
         int startPos = this.bp;
         char startChar = this.ch;
 
+
         for (;;) {
             if (!charArrayCompare(text, bp, fieldName)) {
                 if (isWhitespace(ch)) {
                     next();
+
+                    while (isWhitespace(ch)) {
+                        next();
+                    }
                     continue;
                 }
                 matchStat = NOT_MATCH_NAME;
@@ -954,11 +966,19 @@ public final class JSONScanner extends JSONLexerBase {
 
         int index = bp + fieldName.length;
 
+        int spaceCount = 0;
         char ch = charAt(index++);
         if (ch != '"') {
-            matchStat = NOT_MATCH;
+            while (isWhitespace(ch)) {
+                spaceCount++;
+                ch = charAt(index++);
+            }
 
-            return stringDefaultValue();
+            if (ch != '"') {
+                matchStat = NOT_MATCH;
+
+                return stringDefaultValue();
+            }
         }
 
         final String strVal;
@@ -986,8 +1006,8 @@ public final class JSONScanner extends JSONLexerBase {
                     endIndex = indexOf('"', endIndex + 1);
                 }
 
-                int chars_len = endIndex - (bp + fieldName.length + 1);
-                char[] chars = sub_chars(bp + fieldName.length + 1, chars_len);
+                int chars_len = endIndex - (bp + fieldName.length + 1 + spaceCount);
+                char[] chars = sub_chars(bp + fieldName.length + 1 + spaceCount, chars_len);
 
                 stringVal = readString(chars, chars_len);
             }
@@ -1161,17 +1181,37 @@ public final class JSONScanner extends JSONLexerBase {
     public long scanFieldSymbol(char[] fieldName) {
         matchStat = UNKNOWN;
 
-        if (!charArrayCompare(text, bp, fieldName)) {
-            matchStat = NOT_MATCH_NAME;
-            return 0;
+        for (;;) {
+            if (!charArrayCompare(text, bp, fieldName)) {
+                if (isWhitespace(ch)) {
+                    next();
+
+                    while (isWhitespace(ch)) {
+                        next();
+                    }
+                    continue;
+                }
+                matchStat = NOT_MATCH_NAME;
+                return 0;
+            } else {
+                break;
+            }
         }
 
         int index = bp + fieldName.length;
-
+        int spaceCount = 0;
         char ch = charAt(index++);
         if (ch != '"') {
-            matchStat = NOT_MATCH;
-            return 0;
+            while (isWhitespace(ch)) {
+                ch = charAt(index++);
+                spaceCount++;
+            }
+
+            if (ch != '"') {
+                matchStat = NOT_MATCH;
+
+                return 0;
+            }
         }
 
         long hash = 0xcbf29ce484222325L;

@@ -50,6 +50,8 @@ import java.math.BigInteger;
 import java.security.AccessControlException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -705,7 +707,8 @@ public class TypeUtils{
                 }
             }
         }
-        if(longValue <= 0){
+
+        if(longValue < 0){
             throw new JSONException("can not cast to Timestamp, value : " + value);
         }
         return new java.sql.Timestamp(longValue);
@@ -1266,7 +1269,7 @@ public class TypeUtils{
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    public static <T> T cast(Object obj, ParameterizedType type, ParserConfig mapping){
+    public static <T> T cast(Object obj, ParameterizedType type, ParserConfig mapping) {
         Type rawTye = type.getRawType();
 
         if(rawTye == List.class || rawTye == ArrayList.class){
@@ -1349,7 +1352,9 @@ public class TypeUtils{
                 return null;
             }
         }
-        if(type.getActualTypeArguments().length == 1){
+
+        Type[] actualTypeArguments = type.getActualTypeArguments();
+        if (actualTypeArguments.length == 1) {
             Type argType = type.getActualTypeArguments()[0];
             if(argType instanceof WildcardType){
                 return (T) cast(obj, rawTye, mapping);
@@ -1358,6 +1363,13 @@ public class TypeUtils{
 
         if (rawTye == Map.Entry.class && obj instanceof Map && ((Map) obj).size() == 1) {
             Map.Entry entry = (Map.Entry) ((Map) obj).entrySet().iterator().next();
+            Object entryValue = entry.getValue();
+            if (actualTypeArguments.length == 2 && entryValue instanceof Map) {
+                Type valueType = actualTypeArguments[1];
+                entry.setValue(
+                        cast(entryValue, valueType, mapping)
+                );
+            }
             return (T) entry;
         }
 
@@ -1854,7 +1866,7 @@ public class TypeUtils{
             if(annotation == null && kotlin){
                 if(constructors == null){
                     constructors = clazz.getDeclaredConstructors();
-                    Constructor creatorConstructor = TypeUtils.getKoltinConstructor(constructors);
+                    Constructor creatorConstructor = TypeUtils.getKotlinConstructor(constructors);
                     if(creatorConstructor != null){
                         paramAnnotationArrays = TypeUtils.getParameterAnnotations(creatorConstructor);
                         paramNames = TypeUtils.getKoltinConstructorParameters(clazz);
@@ -2595,37 +2607,37 @@ public class TypeUtils{
         Class<?> rawClass = getRawClass(type);
         Collection list;
         if(rawClass == AbstractCollection.class //
-                || rawClass == Collection.class){
+                || rawClass == Collection.class) {
             list = new ArrayList();
-        } else if(rawClass.isAssignableFrom(HashSet.class)){
+        } else if (rawClass.isAssignableFrom(HashSet.class)) {
             list = new HashSet();
-        } else if(rawClass.isAssignableFrom(LinkedHashSet.class)){
+        } else if (rawClass.isAssignableFrom(LinkedHashSet.class)) {
             list = new LinkedHashSet();
-        } else if(rawClass.isAssignableFrom(TreeSet.class)){
+        } else if (rawClass.isAssignableFrom(TreeSet.class)) {
             list = new TreeSet();
-        } else if(rawClass.isAssignableFrom(ArrayList.class)){
+        } else if(rawClass.isAssignableFrom(ArrayList.class)) {
             list = new ArrayList();
-        } else if(rawClass.isAssignableFrom(EnumSet.class)){
+        } else if (rawClass.isAssignableFrom(EnumSet.class)) {
             Type itemType;
             if(type instanceof ParameterizedType){
                 itemType = ((ParameterizedType) type).getActualTypeArguments()[0];
-            } else{
+            } else {
                 itemType = Object.class;
             }
             list = EnumSet.noneOf((Class<Enum>) itemType);
-        } else if(rawClass.isAssignableFrom(Queue.class)){
+        } else if (rawClass.isAssignableFrom(Queue.class) || rawClass.isAssignableFrom(Deque.class)){
             list = new LinkedList();
-        } else{
-            try{
+        } else {
+            try {
                 list = (Collection) rawClass.newInstance();
-            } catch(Exception e){
+            } catch(Exception e) {
                 throw new JSONException("create instance error, class " + rawClass.getName());
             }
         }
         return list;
     }
 
-    public static Class<?> getRawClass(Type type){
+    public static Class<?> getRawClass(Type type) {
         if(type instanceof Class<?>){
             return (Class<?>) type;
         } else if(type instanceof ParameterizedType) {
@@ -2903,11 +2915,11 @@ public class TypeUtils{
         return kotlin_metadata != null && clazz.isAnnotationPresent(kotlin_metadata);
     }
 
-    public static Constructor getKoltinConstructor(Constructor[] constructors){
-        return getKoltinConstructor(constructors, null);
+    public static Constructor getKotlinConstructor(Constructor[] constructors){
+        return getKotlinConstructor(constructors, null);
     }
 
-    public static Constructor getKoltinConstructor(Constructor[] constructors, String[] paramNames){
+    public static Constructor getKotlinConstructor(Constructor[] constructors, String[] paramNames){
         Constructor creatorConstructor = null;
         for(Constructor<?> constructor : constructors){
             Class<?>[] parameterTypes = constructor.getParameterTypes();
@@ -2982,6 +2994,11 @@ public class TypeUtils{
                 }
                 constructor = item;
             }
+
+            if (constructor == null) {
+                return null;
+            }
+
             List parameters = (List) kotlin_kfunction_getParameters.invoke(constructor);
             String[] names = new String[parameters.size()];
             for(int i = 0; i < parameters.size(); i++){
@@ -3228,5 +3245,18 @@ public class TypeUtils{
             }
         }
         return class_JacksonCreator != null && method.isAnnotationPresent(class_JacksonCreator);
+    }
+
+    public static LocalDateTime castToLocalDateTime(Object value, String format) {
+        if (value == null) {
+            return null;
+        }
+
+        if (format == null) {
+            format = "yyyy-MM-dd HH:mm:ss";
+        }
+
+        DateTimeFormatter df = DateTimeFormatter.ofPattern(format);
+        return LocalDateTime.parse(value.toString(), df);
     }
 }
