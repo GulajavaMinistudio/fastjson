@@ -39,6 +39,8 @@ public class JavaBeanDeserializer implements ObjectDeserializer {
 
     private transient long[] hashArray;
     private transient short[] hashArrayMapping;
+
+    private final ParserConfig.AutoTypeCheckHandler autoTypeCheckHandler;
     
     public JavaBeanDeserializer(ParserConfig config, Class<?> clazz) {
         this(config, clazz, clazz);
@@ -53,6 +55,16 @@ public class JavaBeanDeserializer implements ObjectDeserializer {
     public JavaBeanDeserializer(ParserConfig config, JavaBeanInfo beanInfo){
         this.clazz = beanInfo.clazz;
         this.beanInfo = beanInfo;
+
+        ParserConfig.AutoTypeCheckHandler autoTypeCheckHandler = null;
+        if (beanInfo.jsonType != null && beanInfo.jsonType.autoTypeCheckHandler() != ParserConfig.AutoTypeCheckHandler.class) {
+            try {
+                autoTypeCheckHandler = beanInfo.jsonType.autoTypeCheckHandler().newInstance();
+            } catch (Exception e) {
+                //
+            }
+        }
+        this.autoTypeCheckHandler = autoTypeCheckHandler;
 
         Map<String, FieldDeserializer> alterNameFieldDeserializers = null;
         sortedFieldDeserializers = new FieldDeserializer[beanInfo.sortedFields.length];
@@ -801,7 +813,14 @@ public class JavaBeanDeserializer implements ObjectDeserializer {
 
                             if (deserializer == null) {
                                 Class<?> expectClass = TypeUtils.getClass(type);
-                                userType = config.checkAutoType(typeName, expectClass, lexer.getFeatures());
+
+                                if (autoTypeCheckHandler != null) {
+                                    userType = autoTypeCheckHandler.handler(typeName, expectClass, lexer.getFeatures());
+                                }
+
+                                if (userType == null) {
+                                    userType = config.checkAutoType(typeName, expectClass, lexer.getFeatures());
+                                }
                                 deserializer = parser.getConfig().getDeserializer(userType);
                             }
 
@@ -1271,18 +1290,23 @@ public class JavaBeanDeserializer implements ObjectDeserializer {
         FieldDeserializer fieldDeserializer = getFieldDeserializer(key, setFlags);
 
         if (fieldDeserializer == null) {
-            long smartKeyHash = TypeUtils.fnv1a_64_lower(key);
             if (this.smartMatchHashArray == null) {
                 long[] hashArray = new long[sortedFieldDeserializers.length];
                 for (int i = 0; i < sortedFieldDeserializers.length; i++) {
-                    hashArray[i] = TypeUtils.fnv1a_64_lower(sortedFieldDeserializers[i].fieldInfo.name);
+                    hashArray[i] = sortedFieldDeserializers[i].fieldInfo.nameHashCode;
                 }
                 Arrays.sort(hashArray);
                 this.smartMatchHashArray = hashArray;
             }
 
             // smartMatchHashArrayMapping
+            long smartKeyHash = TypeUtils.fnv1a_64_extract(key);
             int pos = Arrays.binarySearch(smartMatchHashArray, smartKeyHash);
+            if (pos < 0) {
+                long smartKeyHash1 = TypeUtils.fnv1a_64_lower(key);
+                pos = Arrays.binarySearch(smartMatchHashArray, smartKeyHash1);
+            }
+
             boolean is = false;
             if (pos < 0 && (is = key.startsWith("is"))) {
                 smartKeyHash = TypeUtils.fnv1a_64_lower(key.substring(2));
@@ -1294,8 +1318,7 @@ public class JavaBeanDeserializer implements ObjectDeserializer {
                     short[] mapping = new short[smartMatchHashArray.length];
                     Arrays.fill(mapping, (short) -1);
                     for (int i = 0; i < sortedFieldDeserializers.length; i++) {
-                        int p = Arrays.binarySearch(smartMatchHashArray
-                                , TypeUtils.fnv1a_64_lower(sortedFieldDeserializers[i].fieldInfo.name));
+                        int p = Arrays.binarySearch(smartMatchHashArray, sortedFieldDeserializers[i].fieldInfo.nameHashCode);
                         if (p >= 0) {
                             mapping[p] = (short) i;
                         }
