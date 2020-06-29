@@ -32,6 +32,8 @@ import com.alibaba.fastjson.serializer.CalendarCodec;
 import com.alibaba.fastjson.serializer.SerializeBeanInfo;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 
+import java.io.InputStream;
+import java.io.Reader;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 import java.math.BigDecimal;
@@ -39,8 +41,6 @@ import java.math.BigInteger;
 import java.security.AccessControlException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -1839,18 +1839,24 @@ public class TypeUtils{
             if(Modifier.isStatic(method.getModifiers())){
                 continue;
             }
-            if(method.getReturnType().equals(Void.TYPE)){
+
+            Class<?> returnType = method.getReturnType();
+            if(returnType.equals(Void.TYPE)){
                 continue;
             }
+
             if(method.getParameterTypes().length != 0){
                 continue;
             }
-            if(method.getReturnType() == ClassLoader.class){
+
+            if(returnType == ClassLoader.class
+                    || returnType == InputStream.class
+                    || returnType == Reader.class){
                 continue;
             }
 
             if(methodName.equals("getMetaClass")
-                    && method.getReturnType().getName().equals("groovy.lang.MetaClass")){
+                    && returnType.getName().equals("groovy.lang.MetaClass")){
                 continue;
             }
             if(methodName.equals("getSuppressed")
@@ -2048,8 +2054,8 @@ public class TypeUtils{
                 if(methodName.length() < 3){
                     continue;
                 }
-                if(method.getReturnType() != Boolean.TYPE
-                        && method.getReturnType() != Boolean.class){
+                if(returnType != Boolean.TYPE
+                        && returnType != Boolean.class){
                     continue;
                 }
                 char c2 = methodName.charAt(2);
@@ -3077,8 +3083,9 @@ public class TypeUtils{
 
         if(mixInClass != null) {
             A mixInAnnotation = mixInClass.getAnnotation(annotationClass);
-            if(mixInAnnotation == null && mixInClass.getAnnotations().length > 0){
-                for(Annotation annotation : mixInClass.getAnnotations()){
+            Annotation[] annotations = mixInClass.getAnnotations();
+            if(mixInAnnotation == null && annotations.length > 0){
+                for(Annotation annotation : annotations){
                     mixInAnnotation = annotation.annotationType().getAnnotation(annotationClass);
                     if(mixInAnnotation != null){
                         break;
@@ -3090,8 +3097,9 @@ public class TypeUtils{
             }
         }
 
-        if(targetAnnotation == null && targetClass.getAnnotations().length > 0){
-            for(Annotation annotation : targetClass.getAnnotations()){
+        Annotation[] targetClassAnnotations = targetClass.getAnnotations();
+        if(targetAnnotation == null && targetClassAnnotations.length > 0){
+            for(Annotation annotation : targetClassAnnotations){
                 targetAnnotation = annotation.annotationType().getAnnotation(annotationClass);
                 if(targetAnnotation != null){
                     break;
@@ -3272,18 +3280,5 @@ public class TypeUtils{
             }
         }
         return class_JacksonCreator != null && method.isAnnotationPresent(class_JacksonCreator);
-    }
-
-    public static LocalDateTime castToLocalDateTime(Object value, String format) {
-        if (value == null) {
-            return null;
-        }
-
-        if (format == null) {
-            format = "yyyy-MM-dd HH:mm:ss";
-        }
-
-        DateTimeFormatter df = DateTimeFormatter.ofPattern(format);
-        return LocalDateTime.parse(value.toString(), df);
     }
 }

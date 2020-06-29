@@ -1,10 +1,11 @@
 package com.alibaba.fastjson;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
 
-public abstract class JSONValidator implements Cloneable {
+public abstract class JSONValidator implements Cloneable, Closeable {
     public enum Type {
         Object, Array, Value
     }
@@ -58,8 +59,11 @@ public abstract class JSONValidator implements Cloneable {
             }
 
             count++;
+            if (eof) {
+                return true;
+            }
 
-            if (supportMultiValue && !eof) {
+            if (supportMultiValue) {
                 skipWhiteSpace();
                 if (eof) {
                     break;
