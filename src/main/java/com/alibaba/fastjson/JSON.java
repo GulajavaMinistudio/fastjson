@@ -126,8 +126,8 @@ public abstract class JSON implements JSONStreamAware, JSONAware {
 
         {
             if ("false".equals(properties.getProperty("fastjson.asmEnable"))) {
-                ParserConfig.getGlobalInstance().setAsmEnable(false);
-                SerializeConfig.getGlobalInstance().setAsmEnable(false);
+                ParserConfig.global.setAsmEnable(false);
+                SerializeConfig.globalInstance.setAsmEnable(false);
             }
         }
     }
@@ -685,7 +685,15 @@ public abstract class JSON implements JSONStreamAware, JSONAware {
         try {
             JSONSerializer serializer = new JSONSerializer(out);
             serializer.write(object);
-            return out.toString();
+            String outString = out.toString();
+            int len = outString.length();
+            if (len > 0
+                    && outString.charAt(len -1) == '.'
+                    && object instanceof Number
+                    && !out.isEnabled(SerializerFeature.WriteClassName)) {
+                return outString.substring(0, len - 1);
+            }
+            return outString;
         } finally {
             out.close();
         }
@@ -1181,7 +1189,7 @@ public abstract class JSON implements JSONStreamAware, JSONAware {
         if (serializer instanceof JavaBeanSerializer) {
             JavaBeanSerializer javaBeanSerializer = (JavaBeanSerializer) serializer;
             
-            JSONObject json = new JSONObject();
+            JSONObject json = new JSONObject(true);
             try {
                 Map<String, Object> values = javaBeanSerializer.getFieldValuesMap(javaObject);
                 for (Map.Entry<String, Object> entry : values.entrySet()) {
@@ -1193,7 +1201,7 @@ public abstract class JSON implements JSONStreamAware, JSONAware {
             return json;
         }
         
-        String text = JSON.toJSONString(javaObject);
+        String text = JSON.toJSONString(javaObject, config);
         return JSON.parse(text);
     }
 
@@ -1386,5 +1394,5 @@ public abstract class JSON implements JSONStreamAware, JSONAware {
         return null;
     }
 
-    public final static String VERSION = "1.2.74";
+    public final static String VERSION = "1.2.76";
 }

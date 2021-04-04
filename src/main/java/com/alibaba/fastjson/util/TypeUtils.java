@@ -317,20 +317,30 @@ public class TypeUtils{
     }
 
     public static BigDecimal castToBigDecimal(Object value){
-        if(value == null){
+        if (value == null) {
             return null;
         }
-        if(value instanceof BigDecimal){
+
+        if (value instanceof Float) {
+            if (Float.isNaN((Float) value) || Float.isInfinite((Float) value)) {
+                return null;
+            }
+        } else if (value instanceof Double) {
+            if (Double.isNaN((Double) value) || Double.isInfinite((Double) value)) {
+                return null;
+            }
+        } else if (value instanceof BigDecimal) {
             return (BigDecimal) value;
-        }
-        if(value instanceof BigInteger){
+        } else if (value instanceof BigInteger) {
             return new BigDecimal((BigInteger) value);
-        }
-        String strVal = value.toString();
-        if(strVal.length() == 0){
+        } else if (value instanceof Map && ((Map) value).size() == 0) {
             return null;
         }
-        if(value instanceof Map && ((Map) value).size() == 0){
+
+        String strVal = value.toString();
+
+        if (strVal.length() == 0
+                || strVal.equalsIgnoreCase("null")) {
             return null;
         }
 
@@ -340,34 +350,43 @@ public class TypeUtils{
         return new BigDecimal(strVal);
     }
 
-    public static BigInteger castToBigInteger(Object value){
-        if(value == null){
+    public static BigInteger castToBigInteger(Object value) {
+        if (value == null) {
             return null;
         }
-        if(value instanceof BigInteger){
+
+        if (value instanceof Float) {
+            Float floatValue = (Float) value;
+            if (Float.isNaN(floatValue) || Float.isInfinite(floatValue)) {
+                return null;
+            }
+            return BigInteger.valueOf(floatValue.longValue());
+        } else if (value instanceof Double) {
+            Double doubleValue = (Double) value;
+            if (Double.isNaN(doubleValue) || Double.isInfinite(doubleValue)) {
+                return null;
+            }
+            return BigInteger.valueOf(doubleValue.longValue());
+        } else if (value instanceof BigInteger) {
             return (BigInteger) value;
-        }
-        if(value instanceof Float || value instanceof Double){
-            return BigInteger.valueOf(((Number) value).longValue());
-        }
-        if(value instanceof BigDecimal){
+        } else if (value instanceof BigDecimal) {
             BigDecimal decimal = (BigDecimal) value;
             int scale = decimal.scale();
             if (scale > -1000 && scale < 1000) {
                 return ((BigDecimal) value).toBigInteger();
             }
         }
+
         String strVal = value.toString();
-        if(strVal.length() == 0 //
-                || "null".equals(strVal) //
-                || "NULL".equals(strVal)){
+
+        if (strVal.length() == 0
+                || strVal.equalsIgnoreCase("null")) {
             return null;
         }
 
         if (strVal.length() > 65535) {
             throw new JSONException("decimal overflow");
         }
-
         return new BigInteger(strVal);
     }
 
@@ -475,18 +494,19 @@ public class TypeUtils{
 
             if (strVal.indexOf('-') > 0 || strVal.indexOf('+') > 0 || format != null) {
                 if (format == null) {
-                    if (strVal.length() == JSON.DEFFAULT_DATE_FORMAT.length()
-                            || (strVal.length() == 22 && JSON.DEFFAULT_DATE_FORMAT.equals("yyyyMMddHHmmssSSSZ"))) {
+                    final int len = strVal.length();
+                    if (len == JSON.DEFFAULT_DATE_FORMAT.length()
+                            || (len == 22 && JSON.DEFFAULT_DATE_FORMAT.equals("yyyyMMddHHmmssSSSZ"))) {
                         format = JSON.DEFFAULT_DATE_FORMAT;
-                    } else if (strVal.length() == 10) {
+                    } else if (len == 10) {
                         format = "yyyy-MM-dd";
-                    } else if (strVal.length() == "yyyy-MM-dd HH:mm:ss".length()) {
+                    } else if (len == "yyyy-MM-dd HH:mm:ss".length()) {
                         format = "yyyy-MM-dd HH:mm:ss";
-                    } else if (strVal.length() == 29
+                    } else if (len == 29
                             && strVal.charAt(26) == ':'
                             && strVal.charAt(28) == '0') {
                         format = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX";
-                    } else if (strVal.length() == 23 && strVal.charAt(19) == ',') {
+                    } else if (len == 23 && strVal.charAt(19) == ',') {
                         format = "yyyy-MM-dd HH:mm:ss,SSS";
                     } else {
                         format = "yyyy-MM-dd HH:mm:ss.SSS";
@@ -1502,9 +1522,6 @@ public class TypeUtils{
                 Map innerMap = jsonObject.getInnerMap();
                 if (innerMap instanceof LinkedHashMap) {
                     return (T) innerMap;
-                } else {
-                    LinkedHashMap linkedHashMap = new LinkedHashMap();
-                    linkedHashMap.putAll(innerMap);
                 }
             }
 
@@ -1594,6 +1611,7 @@ public class TypeUtils{
                 java.lang.VerifyError.class,
                 java.lang.StackTraceElement.class,
                 java.util.HashMap.class,
+                java.util.LinkedHashMap.class,
                 java.util.Hashtable.class,
                 java.util.TreeMap.class,
                 java.util.IdentityHashMap.class,
@@ -1677,8 +1695,12 @@ public class TypeUtils{
     }
 
     public static Class<?> loadClass(String className, ClassLoader classLoader, boolean cache) {
-        if(className == null || className.length() == 0 || className.length() > 128){
+        if(className == null || className.length() == 0){
             return null;
+        }
+
+        if (className.length() > 198) {
+            throw new JSONException("illegal className : " + className);
         }
 
         Class<?> clazz = mappings.get(className);
@@ -1756,7 +1778,7 @@ public class TypeUtils{
             }
 
             PropertyNamingStrategy jsonTypeNaming = jsonType.naming();
-            if (jsonTypeNaming != PropertyNamingStrategy.CamelCase) {
+            if (jsonTypeNaming != PropertyNamingStrategy.NeverUseThisValueExceptDefaultValue) {
                 propertyNamingStrategy = jsonTypeNaming;
             }
 
@@ -2190,13 +2212,9 @@ public class TypeUtils{
                     map.remove(item);
                 }
             }
-            for(FieldInfo field : map.values()){
-                fieldInfoList.add(field);
-            }
+            fieldInfoList.addAll(map.values());
         } else{
-            for(FieldInfo fieldInfo : fieldInfoMap.values()){
-                fieldInfoList.add(fieldInfo);
-            }
+            fieldInfoList.addAll(fieldInfoMap.values());
             if(sorted){
                 Collections.sort(fieldInfoList);
             }
@@ -2714,6 +2732,9 @@ public class TypeUtils{
                 return true;
             }
             if (interfaceName.equals("org.hibernate.proxy.HibernateProxy")) {
+                return true;
+            }
+            if (interfaceName.equals("org.springframework.context.annotation.ConfigurationClassEnhancer$EnhancedConfiguration")){
                 return true;
             }
         }
@@ -3306,5 +3327,33 @@ public class TypeUtils{
             }
         }
         return class_JacksonCreator != null && method.isAnnotationPresent(class_JacksonCreator);
+    }
+
+    private static Object OPTIONAL_EMPTY;
+    private static boolean OPTIONAL_ERROR = false;
+    public static Object optionalEmpty(Type type) {
+        if (OPTIONAL_ERROR) {
+            return null;
+        }
+
+        Class clazz = getClass(type);
+        if (clazz == null) {
+            return null;
+        }
+
+        String className = clazz.getName();
+
+        if ("java.util.Optional".equals(className)) {
+            if (OPTIONAL_EMPTY == null) {
+                try {
+                    Method empty = Class.forName(className).getMethod("empty");
+                    OPTIONAL_EMPTY = empty.invoke(null);
+                } catch (Throwable e) {
+                    OPTIONAL_ERROR = true;
+                }
+            }
+            return OPTIONAL_EMPTY;
+        }
+        return null;
     }
 }
